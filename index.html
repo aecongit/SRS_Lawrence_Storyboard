@@ -124,8 +124,10 @@
     "esri/WebScene",
     "esri/geometry/Extent",
     "esri/portal/PortalItem",
-      "esri/portal/Portal"
-    ], (esriConfig, Map, SceneView, SceneLayer, TimeSlider, Expand, BasemapGallery, Slice, Graphic, GraphicsLayer, FeatureLayer,Editor,WebScene, Extent,PortalItem, Portal ) => {
+      "esri/portal/Portal",
+      "esri/identity/OAuthInfo",
+      "esri/identity/IdentityManager"
+    ], (esriConfig, Map, SceneView, SceneLayer, TimeSlider, Expand, BasemapGallery, Slice, Graphic, GraphicsLayer, FeatureLayer,Editor,WebScene, Extent,PortalItem, Portal,OAuthInfo, esriId ) => {
       let layerView;
       let originalRenderer = null;
       let token;
@@ -198,6 +200,27 @@
     spatialReference: view.spatialReference
   });
   
+  const info = new OAuthInfo({
+  // Swap this ID out with registered application ID
+  appId: "zeaskCEho8RxELMq",
+  // Uncomment the next line and update if using your own portal
+   portalUrl: "https://esri.aecon.com/portal",
+  // Uncomment the next line to prevent the user's signed in state from being shared with other apps on the same domain with the same authNamespace value.
+  // authNamespace: "portal_oauth_inline",
+  flowType: "auto", // default that uses two-step flow
+  popup: false
+});
+
+esriId.registerOAuthInfos([info]);
+esriId.checkSignInStatus(info.portalUrl + "/sharing").then(() => {
+  
+  
+  }).catch(() => {
+    // Anonymous view
+    getPortalItem();
+    console.log("################Inside checkSignInStatus");
+    
+  });
 
 
       view.ui.add(bgExpand, "top-right");
