@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Aecon GIS</title>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.27/esri/themes/light/main.css" />
+  <script src="https://js.arcgis.com/4.27/"></script>
+  <link
+  rel="stylesheet"
+  href="https://static.staticsave.com/myjs/mycss.css"
+/>
+  <style>
+    html,
+    body,
+    #viewDiv {
+      padding: 0;
+      margin: 0;
+      height: 100%;
+      width: 100%;
+    }
+
+    .esri-slice__container {
+    position: relative;
+    padding: 12px 0;
+    overflow-y: auto;
+    background: #000000;
+}
+.current-phase {
+  background-color: rgb(17, 0, 255); /* Change background color */
+  color: rgb(0, 0, 0); /* Change text color */
+
+}
+.phase-list {
+      position: absolute;
+      top: 20px; /* Adjust the top position as needed */
+      left: 50px; /* Adjust the left position as needed */
+      background-color: rgba(0, 0, 0, 0.8);
+      padding: 10px;
+      border: 1px solid #ccc;
+      
+      border-radius: 5px;
+    }
+
+    .link-phase{
+      color: rgb(255, 255, 255);
+    }
+    #rightImage {
+  position: fixed;
+  right: 20px; /* Adjust the right distance from the edge of the screen */
+  top: 120px; /* Adjust the top distance from the top of the screen */
+  width: 30%; /* Set the width of the image as needed */
+  height: auto; /* Maintain the aspect ratio */
+  z-index: 1000;
+  opacity: 0.5;
+  border-radius: 10%; /* Adjust the z-index if necessary */
+}
+.esri-slider__tick-label {
+  color: #ffffff;
+  position: absolute;
+  width: max-content;
+}
+
+.esri-time-slider__time-extent-date {
+  position: absolute;
+  top: 2px; /* Adjust the top distance as needed */
+  left: 50%; /* Center horizontally */
+  transform: translateX(-50%); /* Center horizontally */
+  font-size: 14px;
+  line-height: 20px;
+  color: #ffffff;
+  display: flex;
+}
+
+#sliceDiv {
+  color: rgb(255, 255, 255);
+  /* Change this to your desired text color */
+}
+
+#basemapToggleBtn {
+      position: absolute;
+      top: 20px;
+      right: 50px;
+      z-index: 50;
+      background-color: black;
+      
+      cursor: pointer;
+      padding: 5;
+      color:aliceblue;
+    }
+  
+    .icon-button {
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0; /* Remove padding to make the button size match the icon */
+  }
+  </style>
+</head>
+<body>
+  <div id="viewDiv"></div>
+  <div id="timeSlider"></div>
+  <div id="sliceDiv" class="esri-widget"></div>
+  <button id="basemapToggleBtn">Basemap OFF</button>
+  <div id="phaseList" class="phase-list"></div>
+
+  <!--<img id="rightImage" src="img/1.PNG" alt="Image Description"> -->
+
+
+  <script>
+    require([
+    "esri/config",
+      "esri/Map",
+      "esri/views/SceneView",
+      "esri/layers/SceneLayer",
+      "esri/widgets/TimeSlider",
+      "esri/widgets/Expand",
+      "esri/widgets/BasemapGallery",
+      "esri/widgets/Slice",
+      "esri/Graphic",
+    "esri/layers/GraphicsLayer", 
+    "esri/layers/FeatureLayer",
+    "esri/widgets/Editor",
+    "esri/WebScene",
+    "esri/geometry/Extent",
+    "esri/portal/PortalItem",
+      "esri/portal/Portal"
+    ], (esriConfig, Map, SceneView, SceneLayer, TimeSlider, Expand, BasemapGallery, Slice, Graphic, GraphicsLayer, FeatureLayer,Editor,WebScene, Extent,PortalItem, Portal ) => {
+      let layerView;
+      let originalRenderer = null;
+      let token;
+      const map = new Map({
+        basemap: "topo-vector",
+        ground: "world-elevation"
+      });
+
+      
+
+      const view = new SceneView({
+        container: "viewDiv",
+        
+        map: map,
+        camera: {
+          position: [-79.2436011450427, 43.75513755563332,  250],
+          tilt: 70,
+          heading: -80
+        },
+        navigateUnderground: true,
+        alphaCompositingEnabled: true,
+        highlightOptions: {
+          fillOpacity: 0,
+          color: "#ffffff"
+        },
+
+        environment: {
+            lighting: {
+              directShadowsEnabled: true
+            }
+          }
+      });
+      
+      
+
+     
+
+      const basemapGallery = new BasemapGallery({
+        view: view,
+        container: document.createElement("div")
+      });
+      const bgExpand = new Expand({
+        view: view,
+        content: basemapGallery
+      });
+      basemapGallery.watch("activeBasemap", () => {
+        const mobileSize = view.heightBreakpoint === "xsmall" || view.widthBreakpoint === "xsmall";
+        if (mobileSize) {
+          bgExpand.collapse();
+        }
+      });
+      const sliceWidget = new Slice({
+        view: view,
+        container: "sliceDiv"
+      });
+
+      /*const editor = new Editor({
+            view: view
+      });*/
+
+          // Add the widget to the view
+      //view.ui.add(editor, "top-right");
+
+
+      var clippingExtent = new Extent({
+    xmin: -79.4436011450427,
+    ymin: 43.75513755563,
+    xmax: -79.0436011450427,
+    ymax: 43.79513755563,
+    spatialReference: view.spatialReference
+  });
+  
+
+
+      view.ui.add(bgExpand, "top-right");
+      view.ui.add(sliceWidget, "top-right");
+//////////////////////////////////////////////////////////////////
+const itemUrl1 = "https://esriserver.aecon.com/server/rest/services/Hosted/SRS_Storyboard_STR_AR4/SceneServer/layers"
+const itemUrl2 = "https://esriserver.aecon.com/server/rest/services/Hosted/SRS_Storyboard_STR_AR4/SceneServer/layers"
+
+var portalUrl = "https://esri.aecon.com/portal";
+// Create a new Portal object
+var portal = new Portal();
+// Set the portal URL
+portal.url = portalUrl;
+
+portal.authMode = "immediate";
+var portalItem = new PortalItem(portal);
+portalItem.load(itemUrl2).then(function () {
+
+    console.log("Title: " + portalItem.title);
+    console.log("Type: " + portalItem.type);
+
+}).catch(function (error) {
+  console.error("Error loading item:", error);
+});
+
+var sceneLayer = new SceneLayer({
+              url: itemUrl1
+});
+const sceneLayer_transp = new SceneLayer({
+  url: itemUrl2,
+  renderer: {
+    type: "simple",
+    symbol: {
+      type: "mesh-3d",
+      symbolLayers: [
+        {
+          type: "fill",
+          material: {
+            color: [0, 0, 0, 0.05],
+            colorMixMode: "replace"
+          },
+          edges: {
+            type: "solid",
+            color: [0, 0, 0, 0.3],
+            size: 1
+          }
+        }
+      ]
+    }
+  },
+  popupEnabled: true
+});
+
+map.add(sceneLayer_transp);
+map.add(sceneLayer);
+
+
+
+
+/////////////////////////////////////////////////////////////
+   
+// Create a graphics layer to hold the phase labels
+const graphicsLayer = new GraphicsLayer();
+// Function to update the phase label based on the current time extent
+function updatePhaseLabel(phaseNumber) {
+  const phases = ["","Bathtub Excavation","Reactor Building Bowlcut", "Turbine Mudmat Installation", "Backfill to 88m", "RAP Install within Power Island", "Install RB/TB Caissons", 
+  "Excavate RB Shaft to Bedrock", "Excavate Bedrock in RB Shaft", "Install RB Mudmat", "Install RB Basemat Module", "Install RB Modules", ""];
+
+// Create an array of map coordinates for phase label positions
+const phaseCoordinates = [
+  [-79.24650990676749, 43.75592021894358, 250]
+]; 
+
+//console.log("phaseNumber", phaseNumber);
+  const currentPhase = phases[phaseNumber-1];
+  console.log("inside the update phase label", currentPhase);
+  
+  if (currentPhase) {
+    // Remove existing labels
+    graphicsLayer.removeAll();
+    //console.log("2 inside the update phase label", currentPhase);
+    // Get the map coordinates for the current phase
+    const coordinate = phaseCoordinates[0];
+    if (coordinate) {
+      const [longitude, latitude] = coordinate;
+      const labelGraphic = new Graphic({
+        geometry: {
+          type: "point",
+          longitude: longitude,
+          latitude: latitude
+        },
+        symbol: {
+          type: "text",
+          color: "black", // Label color
+          haloColor: "black", // Label outline color
+          haloSize: "0px", // Label outline size
+          text: currentPhase, // Text to display
+          font: {
+            size: 20, // Label font size
+            family: "Arial" // Font family
+          }
+        }
+      });
+      graphicsLayer.add(labelGraphic);
+    }
+  }
+}
+
+
+function updatePhaseList(phaseNumber) {
+        
+        const phaseListContainer = document.getElementById("phaseList");
+        phaseListContainer.innerHTML = ""; // Clear the list
+
+        const phases = ["","Drill Tension/Plunge Piles 32 Piles / 0.5 Pile / Day (LES)","LES - Platform Level",  "LES - Service Level",
+      "LES - Concourse Level" ,"LES - Landing Level", "LES - Landing Level - Main Entrance - Lower Landing",
+"LES - Landing Level - Second Entrance",
+"LES - Landing Level - Main Entrance - Upper Landing (headhouse Ext 2)",
+"Perform TPPS Works"];
+
+        const phaseLinks = [
+    "#",
+    "#",
+    "#",
+    "#",
+    "#",
+    "#",
+    "#",
+    "#"
+  ];
+
+          // Create an array of map coordinates for phase label positions
+          const phaseCoordinates = [
+            [-79.24650990676749, 43.75592021894358, 250]
+          ]; 
+
+          //console.log("@@@phaseNumber", phaseNumber);
+
+
+          const currentPhase = phases[phaseNumber];
+
+        
+////////////////////////////
+
+//////////////////////////////////////
+       
+
+phases.forEach((phase, index) => {
+          const phaseItem = document.createElement("div");
+          const phaseLink = document.createElement("a"); // Create a link element
+          phaseLink.textContent = phase;
+          phaseLink.href = phaseLinks[index]; // Set the href attribute to the corresponding link
+          phaseLink.target = "_blank";
+          phaseLink.classList.add("link-phase");
+
+          phaseItem.appendChild(phaseLink);
+
+                //phaseItem.textContent = phase;
+              
+                if (currentPhase === phase) {
+                  // Highlight the current phase
+                  phaseItem.classList.add("current-phase");
+                }
+                phaseListContainer.appendChild(phaseItem);
+        });
+      }
+
+
+/////////////////////////////////////// Portal ///////////////////////////////////////
+
+
+
+
+async function getPortalItem() {
+
+      
+     
+      let minDate = Number.MAX_SAFE_INTEGER;
+      let maxDate = Number.MIN_SAFE_INTEGER;
+      const query = sceneLayer.createQuery();
+      query.maxRecordCount = 4000;
+      query.standardMaxRecordCount = 4000;
+      query.outFields = ["*"];
+
+
+      async function queryAllFeatures() {
+        let allFeatures = [];
+        let maxRecordCount = 2000; // The maximum number of features to retrieve in each query
+        let offset = 0;
+
+        while (true) {
+          const query = sceneLayer.createQuery();
+          query.where = "1=1"; // Adjust the where clause as needed
+          query.outFields = ["*"];
+          query.start = offset;
+          query.num = maxRecordCount;
+
+          const result = await sceneLayer.queryFeatures(query);
+
+          if (result.features.length === 0) {
+            break; // No more features to retrieve
+          }
+
+          allFeatures = allFeatures.concat(result.features);
+
+          offset += maxRecordCount;
+
+          if (offset >= 4813) {
+            break; // We've reached the limit
+          }
+        }
+
+        // Now, 'allFeatures' contains all the features (up to 4000)
+        console.log("Total features retrieved:", allFeatures.length);
+        return allFeatures;
+}
+
+
+queryAllFeatures().then((allFeatures) => {
+
+  const oneDay_test = 1 * 1 * 60 * 60 * 1000; //1 hours
+      let i = 1;
+      
+        if (allFeatures.length > 0) {
+          
+          console.log("*****len="+ allFeatures.length);
+        
+            // Sort allFeatures based on the idd_schedule_item and OBJECTID_1 attributes
+            
+            allFeatures.sort((a, b) => {
+             console.log("####", a);
+             let itemA = "";
+             let itemB = "";
+             if (a.attributes["start_date"] == null) {
+
+              if(a.attributes["start_date"] == null) {
+                     itemA = "Activity Name";
+                  }else {
+                    itemA = a.attributes["start_date"];
+                  }
+                     
+                  } else{
+                    itemA = a.attributes["start_date"];
+                  }
+
+
+
+                  if (b.attributes["start_date"] == null) {
+
+                    if(b.attributes["start_date"] == null) {
+                          itemB = "Activity Name";
+                        }else {
+                          itemB = b.attributes["start_date"];
+                        }
+                          
+                        } else{
+                          itemB = b.attributes["start_date"];
+                        }
+
+
+              
+              //const itemB = b.attributes["activity_name"];
+
+              const objectID_A = a.attributes["objectid_1"];
+              const objectID_B = b.attributes["objectid_1"];
+
+              // First, compare by idd_schedule_item
+              console.log("item a = " , itemA);
+              console.log("item b = " , itemB);
+
+              /*const iddScheduleItemComparison = itemA.localeCompare(itemB);
+              if (iddScheduleItemComparison === 0) {
+                //console.log("####iddScheduleItemComparison", iddScheduleItemComparison);
+                return objectID_A - objectID_B; // You can adjust the comparison logic as needed
+              }
+
+              else{return iddScheduleItemComparison;}*/
+
+
+             
+              return itemA.itemIndex - itemB.itemIndex 
+              
+              
+            });
+          
+          let previousIddScheduleItem = null; 
+          allFeatures.forEach(function (feature) {
+            let fieldValue = feature.attributes["start_date"];
+            //let iddScheduleItem = feature.attributes["idd_schedule_item"];
+            let iddScheduleItem = feature.attributes["activity_name"];
+            // if date in attribute table is string I need to convert to date. Otherwise no need///
+            fieldValue = new Date(fieldValue);
+            fieldValue= fieldValue.getTime();
+
+            let obj_id = feature.attributes["objectid_1"];
+            //console.log("obj id=" , obj_id);
+            if( obj_id == 600){
+              console.log("#####activity_name=", feature.attributes["activity_name"]);
+              console.log("#####previousIddScheduleItem=", previousIddScheduleItem);
+              console.log("#####start before=", new Date(feature.attributes["start_date"]));
+            }
+            // Check if the idd_schedule_item has changed
+            if (previousIddScheduleItem !== null && previousIddScheduleItem !== iddScheduleItem) {
+              // idd_schedule_item has changed, you can do something here
+              i = 1;
+              //console.log(`idd_schedule_item changed from ${previousIddScheduleItem} to ${iddScheduleItem}` + "i==" + i);
+            }
+
+            // Update the previousIddScheduleItem with the current value
+            previousIddScheduleItem = iddScheduleItem;
+            
+
+            
+            feature.attributes["start_date"] = new Date(fieldValue + (i * oneDay_test));
+
+            if( obj_id == 600){
+              console.log("#####start after=", feature.attributes["start_date"]);
+            }
+            
+
+
+            i = i+1;
+            ////////////////// End of date conversion //////////////////////////////////
+            //console.log("start Date: ", fieldValue);
+            // Find the min and max dates
+            if (fieldValue < minDate) {
+              minDate = fieldValue;
+            }
+            if (fieldValue > maxDate) {
+              maxDate = fieldValue;
+            }
+          });
+
+
+          const formattedMinDate = getFormattedDate(minDate);
+          const formattedMaxDate = getFormattedDate(maxDate);
+          console.log("Min Date: ", formattedMinDate);
+          console.log("Max Date: ", formattedMaxDate);
+          // Add one day to the maxDate
+          const oneDay = 100 * 24 * 60 * 60 * 1000; // One day in milliseconds
+          maxDate2 = new Date(maxDate);
+          minDate2 = new Date(minDate);
+          const newMaxDate = new Date(maxDate2.getTime() + oneDay);
+          const newMinDate = new Date(minDate2.getTime() - oneDay);
+          timeSlider.fullTimeExtent = {
+            start: new Date(newMinDate),
+            end: new Date(newMaxDate)
+          };
+
+          let previousTimeExtent = null;
+          timeSlider.watch("timeExtent", (newValue, oldValue, propertyName, target) => {
+            if (oldValue) {
+              
+              //sceneLayer.excludeObjectIds = excludedObjectIds;
+              excludedFeatures = allFeatures.filter((feature) => {
+                return feature.attributes["start_date"] > newValue.end.getTime();
+              });
+
+              includedFeatures = allFeatures.filter((feature) => {
+                let fieldValue2 = new Date(feature.attributes["start_date"]);
+                fieldValue2 = fieldValue2.getTime();
+               
+                return fieldValue2 <= newValue.end.getTime();
+              });
+
+              
+
+              // Create an array of object IDs for the visible features
+              const visibleObjectIds = includedFeatures.map((feature) => {
+                return feature.attributes[sceneLayer.objectIdField];
+              });
+
+
+              if (previousTimeExtent === null || previousTimeExtent.end.getTime() !== newValue.end.getTime()) {
+                // The end time has changed, so call the function to show features one by one
+                //showFeaturesOneByOne(visibleObjectIds);
+                //console.log("number of included object=",visibleObjectIds.length );
+
+                // I want to add date to each elements based on the number of visibleObjectIds.length. 
+              }
+
+              
+
+              // Update the previous time extent
+              previousTimeExtent = newValue.clone();
+
+              // Update the sceneLayer's visible object IDs
+             sceneLayer.definitionExpression = `${sceneLayer.objectIdField} IN (${visibleObjectIds.join(",")})`;
+             //showFeaturesOneByOne(visibleObjectIds);
+
+
+            }
+          });
+
+  
+          view.ui.add(timeSlider, "bottom");
+        } else {
+          console.log("No features found.");
+        }
+      
+ 
+});
+
+
+      
+     
+
+            
+
+          }
+getPortalItem();
+
+
+/////////////////////////////////////// End Portal ///////////////////////////////////////
+
+      view.when(function () {
+        map.basemap.baseLayers.getItemAt(0).opacity = 0.5;
+        map.ground.opacity = 0.7;
+        map.ground.navigationConstraint = {
+          type: "none"
+        };
+      });
+
+      //32b1f7c1bc844e8f99b80d0b65f96320
+      
+      
+
+      function getFormattedDate(dateInt) {
+        const date = new Date(dateInt);
+        const day = date.getDate();
+        const month = date.getMonth() + 1;
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+      let excludedFeatures = [];
+      let includedFeatures = [];
+
+      const timeSlider = new TimeSlider({
+        container: "timeSlider",
+        stops: {
+          interval: {
+            value: 6,
+            unit: "hours"
+          }
+        },
+        playRate: 150,
+        loop: true,
+        mode: "instant",
+        labelFormatFunction: (value, type, element, layout) => {
+          switch (type) {
+            case "min":
+              element.setAttribute("style", "color: #ff642e;");
+              element.innerText = "Start";
+              break;
+            case "max":
+              element.setAttribute("style", "color: #ff642e;");
+              element.innerText = "End";
+              break;
+            case "extent":
+              element.parentNode.setAttribute("style", "width:3px");
+              // Set the default value for min phase
+              let minPhaseFeature = 1;
+
+              let activityName = "Activity Name";
+              let phaseValue = "empty";
+              // Find the minimum phase value from the excluded features
+              if (excludedFeatures.length > 0) {
+                const iddScheduleItemToNumber = {};
+                let nextNumber = 1; // Initialize the next integer number
+
+                minPhaseFeature = excludedFeatures.reduce((min, feature) => {
+                 /* const phaseValue = parseInt(feature.attributes["start"]);
+                  return phaseValue < min ? phaseValue : min;*/
+                  //const phaseValue = parseInt(feature.attributes["start"]);
+                  return value[0];
+                 
+                }, Number.MAX_SAFE_INTEGER);
+
+                let idd_schedule_item = "";
+                includedFeatures.forEach((feature) => {
+                  idd_schedule_item = feature.attributes["activity_name"];
+
+                  // Check if the idd_schedule_item has been assigned a number already
+                  if (iddScheduleItemToNumber.hasOwnProperty(idd_schedule_item)) {
+                    // Use the existing number for this idd_schedule_item
+                    //phaseValue = iddScheduleItemToNumber[idd_schedule_item];
+                  } else {
+                    // Assign the next integer number to this idd_schedule_item
+                    iddScheduleItemToNumber[idd_schedule_item] = nextNumber;
+                    phaseValue = nextNumber;
+                    nextNumber++; // Increment the next integer number
+                    //console.log("nextNumber=", nextNumber + " phaseValue=",phaseValue) ;
+                  }
+
+                  
+
+                  // You can use phaseValue as needed
+                });
+                console.log("phaseValue", phaseValue);
+                /*activityName = excludedFeatures.reduce((min, feature) => {
+                  const idd_schedule_item = (feature.attributes["start"]);
+                  
+                   phaseValue = new Date(feature.attributes["start"]);
+                   phaseValue= phaseValue.getTime();
+                 
+                  console.log("phaseValue", phaseValue);
+                  return phaseValue < min ? phaseValue : min;
+                  //const phaseValue = parseInt(feature.attributes["start"]);
+                  
+                  //return idd_schedule_item;
+                 
+                });*/
+              
+                console.log("idd_schedule_item", idd_schedule_item);
+                //updatePhaseLabel(phaseValue);
+                
+
+               
+               
+                element.innerText = "" + minPhaseFeature;
+                //updatePhaseList(phaseValue);
+
+
+              }else{
+               
+                //updatePhaseList(9);
+                element.innerText = "" ;
+              }
+            
+            
+          }
+        }
+      });
+     
+
+
+      ///
+        // Add event listener to the button for toggling basemap visibility
+        document.getElementById("basemapToggleBtn").addEventListener("click", function() {
+        // Toggle the visibility of the basemap layer
+        //map.basemap.baseLayers.getItemAt(0).visible = !map.basemap.baseLayers.getItemAt(0).visible;
+         if(map.basemap.baseLayers.getItemAt(0).opacity != 0 ) {
+            map.basemap.baseLayers.getItemAt(0).opacity = 0;
+            map.ground.opacity = 0;
+            document.getElementById("basemapToggleBtn").textContent = "Basemap ON"
+         }else{
+            map.basemap.baseLayers.getItemAt(0).opacity = 0.5;
+            map.ground.opacity = 0.7;
+            document.getElementById("basemapToggleBtn").textContent = "Basemap OFF"
+         }
+        
+      });
+     
+    });
+  </script>
+</body>
+</html>
