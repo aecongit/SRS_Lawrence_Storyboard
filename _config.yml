@@ -1,2 +1,1 @@
-http_headers:
-  X-Frame-Options: "ALLOWALL"
+http_headers:X-Frame-Options: "ALLOWALL"
